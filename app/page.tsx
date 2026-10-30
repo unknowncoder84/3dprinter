@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
-import { Copy, Download, FilePlus, FilePlus2, FolderOpen, Loader2, Package, Save, Settings2, Sparkles, Upload, Boxes } from 'lucide-react';
+import { Copy, Download, FilePlus, FilePlus2, FolderOpen, Hash, Loader2, Package, Save, Settings2, Sparkles, Upload, Boxes } from 'lucide-react';
 import type { CardImage, DeepPartial, FlashcardConfig } from '@/types/flashcard';
 import { createInitialState, missingLetters, projectReducer, type ApplyGroup, type LoadedProject } from '@/lib/state/projectState';
 import { useFlashcardModel } from '@/lib/state/useFlashcardModel';
@@ -16,6 +16,7 @@ import CardControls from '@/components/CardControls';
 import { CardStrip } from '@/components/CardStrip';
 import { StatusPanel, toExportRecord, type ExportRecord } from '@/components/StatusPanel';
 import { ApplySettingsDialog, ConfirmDialog, ExportAllDialog, LoadProjectDialog, SaveProjectDialog } from '@/components/dialogs';
+import { NumberRangeDialog } from '@/components/NumberRangeDialog';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
 import { btn } from '@/components/ui/Modal';
 
@@ -35,7 +36,7 @@ interface ConfirmRequest {
   danger?: boolean;
 }
 
-type Dialog = null | 'save' | 'load' | 'exportAll' | 'apply';
+type Dialog = null | 'save' | 'load' | 'exportAll' | 'apply' | 'numbers';
 
 function App() {
   const toast = useToast();
@@ -144,6 +145,12 @@ function App() {
     dispatch({ type: 'generateAz' });
     toast.push('success', `Added ${missing.length} card${missing.length === 1 ? '' : 's'} (${missing.join(' ')}) using the selected card’s settings. Existing cards were not touched. Upload an illustration for each card before exporting.`);
   };
+  const onGenerateNumbers = (from: number, to: number) => {
+    dispatch({ type: 'generateNumbers', from, to });
+    setDialog(null);
+    toast.push('success', `Added missing number cards from ${from} to ${to}. Edit their words and add illustrations as needed.`);
+  };
+
   const onDeleteCard = async () => {
     const ok = await confirm({
       title: 'Delete this card?',
@@ -335,6 +342,7 @@ function App() {
           <button type="button" onClick={onNewCard} className={tbtn} data-testid="new-card"><FilePlus2 className="h-3.5 w-3.5" /> New card</button>
           <button type="button" onClick={onDuplicate} className={tbtn} data-testid="duplicate-card"><Copy className="h-3.5 w-3.5" /> Duplicate card</button>
           <button type="button" onClick={onGenerateAz} className={tbtn} data-testid="generate-az"><Sparkles className="h-3.5 w-3.5" /> Generate A–Z</button>
+          <button type="button" onClick={() => setDialog('numbers')} className={tbtn} data-testid="generate-numbers"><Hash className="h-3.5 w-3.5" /> Generate numbers</button>
           <button type="button" onClick={() => setDialog('apply')} className={tbtn} data-testid="apply-settings"><Settings2 className="h-3.5 w-3.5" /> Apply settings to cards…</button>
           <span className="mx-1 h-5 w-px bg-slate-300" aria-hidden />
           <button type="button" onClick={onSaveClick} className={tbtn} data-testid="save-project"><Save className="h-3.5 w-3.5" /> Save</button>
@@ -358,6 +366,7 @@ function App() {
               cardKey={card.id}
               placeMode={placeOnViewer}
               holeCenter={{ x: card.holeSettings.x, y: card.holeSettings.y, diameter: card.holeSettings.diameter, enabled: card.holeSettings.enabled }}
+              appearance={card.appearance}
               onPlaceHole={placeHole}
             />
           </div>
@@ -382,6 +391,7 @@ function App() {
       {dialog === 'save' && <SaveProjectDialog initialName={state.projectName === 'Untitled project' ? '' : state.projectName} onSave={saveProject} onCancel={() => setDialog(null)} />}
       {dialog === 'load' && <LoadProjectDialog onLoad={loadSaved} onClose={() => setDialog(null)} onError={(msg) => toast.push('error', msg)} />}
       {dialog === 'exportAll' && <ExportAllDialog cards={state.cards} selectedId={card.id} onClose={() => setDialog(null)} onResult={(kind, msg) => toast.push(kind, msg)} />}
+      {dialog === 'numbers' && <NumberRangeDialog onGenerate={onGenerateNumbers} onClose={() => setDialog(null)} />}
       {dialog === 'apply' && (
         <ApplySettingsDialog
           cards={state.cards}

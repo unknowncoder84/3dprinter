@@ -293,3 +293,50 @@ test('file names follow Letter_word.stl', () => {
   assert.equal(stlFileName('Ii', 'Ice cream'), 'I_ice-cream.stl');
   assert.equal(stlFileName('', ''), 'CARD.stl');
 });
+
+test('raised border is part of the shared preview/STL solid', async () => {
+  const c = testCard({ alphabet: '', word: '' });
+  c.appearance = { ...c.appearance, borderStyle: 'raised', borderWidth: 2, borderHeight: 0.8 };
+  const m = await buildFlashcardModel(c, nodeDeps());
+  assert.ok(m.parts.some((p) => p.role === 'border' && p.positions.length > 0), 'border part exists');
+  assert.equal(m.layers.border.length > 0, true);
+  assert.ok(m.validation.closedManifold, m.validation.messages.join('; '));
+  near(m.validation.size[0], 80, 0.01);
+  near(m.validation.size[1], 100, 0.01);
+  near(m.validation.size[2], 3.8, 0.01, 'border raises the card');
+});
+
+test('alphabet, word, illustration and border can be engraved as real recessed geometry', async () => {
+  const c = testCard({ alphabet: 'Aa', word: 'ant' });
+  c.textSettings = { ...c.textSettings, alphabetRelief: 'engraved', wordRelief: 'engraved' };
+  c.imageSettings = { ...c.imageSettings, reliefMode: 'engraved' };
+  c.appearance = { ...c.appearance, borderStyle: 'engraved', borderWidth: 2, borderHeight: 0.7 };
+  const m = await buildFlashcardModel(c, nodeDeps());
+  assert.ok(m.validation.closedManifold, m.validation.messages.join('; '));
+  assert.equal(m.blocking, false, JSON.stringify(m.issues));
+  assert.ok(m.parts.some((p) => p.role === 'alphabet' && p.positions.length > 0));
+  assert.ok(m.parts.some((p) => p.role === 'word' && p.positions.length > 0));
+  assert.ok(m.parts.some((p) => p.role === 'border' && p.positions.length > 0));
+  near(m.validation.size[2], 3, 0.01, 'engraved-only model keeps the base top as its maximum height');
+});
+
+test('engraved outline plus filled mode exports every pattern as one printable STL', async () => {
+  const c = testCard({ image: svgImage(antSvg(), 'ant.svg') });
+  c.textSettings = { ...c.textSettings, alphabetRelief: 'engraved-filled', wordRelief: 'engraved-filled' };
+  c.imageSettings = { ...c.imageSettings, reliefMode: 'engraved-filled' };
+  c.appearance = { ...c.appearance, borderStyle: 'engraved-filled', borderWidth: 2, borderHeight: 0.8, wordOutlineWidth: 0.6 };
+  const m = await buildFlashcardModel(c, nodeDeps());
+  assert.equal(m.blocking, false, JSON.stringify(m.issues));
+  assert.ok(m.validation.closedManifold, m.validation.messages.join('; '));
+  assert.equal(m.validation.components, 1);
+  const roles = m.parts.map((p) => p.role);
+  assert.ok(roles.includes('alphabet') && roles.includes('word') && roles.includes('image') && roles.includes('border'));
+  assert.ok(roles.filter((r) => r === 'pattern-outline').length >= 3, `pattern outline parts: ${roles.join(',')}`);
+  const bytes = positionsToStl(mergeParts(m.parts));
+  const report = analyzeStl(bytes);
+  assert.ok(report.validation.closedManifold, report.validation.messages.join('; '));
+  assert.equal(report.validation.components, 1);
+  near(report.validation.size[0], 80, 0.02);
+  near(report.validation.size[1], 100, 0.02);
+  near(report.validation.size[2], 4.6, 0.02, 'raised fill maximum');
+});

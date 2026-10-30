@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Loader2, Minus, Plus, Crosshair } from 'lucide-react';
+import type { AppearanceSettings } from '@/types/flashcard';
 import type { FlashcardModel, PartRole } from '@/lib/geometry/model';
 
 export interface ViewerProps {
@@ -17,14 +18,18 @@ export interface ViewerProps {
   cardKey: string;
   placeMode: boolean;
   holeCenter: { x: number; y: number; diameter: number; enabled: boolean } | null;
+  appearance: AppearanceSettings;
   onPlaceHole?: (xFromLeft: number, yFromTop: number) => void;
 }
 
-const MATERIALS: Record<PartRole, { color: number; roughness: number }> = {
-  base: { color: 0xf7f7f2, roughness: 0.55 },
-  alphabet: { color: 0x17171a, roughness: 0.45 },
-  word: { color: 0x17171a, roughness: 0.45 },
-  image: { color: 0x17171a, roughness: 0.45 },
+const MATERIALS: Record<PartRole, { color: string; roughness: number }> = {
+  base: { color: '#f7f7f2', roughness: 0.55 },
+  alphabet: { color: '#17171a', roughness: 0.45 },
+  word: { color: '#17171a', roughness: 0.45 },
+  'word-outline': { color: '#16a34a', roughness: 0.45 },
+  'pattern-outline': { color: '#16a34a', roughness: 0.45 },
+  image: { color: '#17171a', roughness: 0.45 },
+  border: { color: '#16a34a', roughness: 0.45 },
 };
 
 const DEFAULT_DIR = new THREE.Vector3(0.3, 0.14, 1).normalize();
@@ -66,7 +71,7 @@ function frameDistance(cam: THREE.PerspectiveCamera, dir: THREE.Vector3, size: T
   return Math.max((proj(up) * margin) / tanV, (proj(right) * margin) / tanH) + proj(d);
 }
 
-export default function FlashcardViewer3D({ model, building, error, stale, cardKey, placeMode, holeCenter, onPlaceHole }: ViewerProps) {
+export default function FlashcardViewer3D({ model, building, error, stale, cardKey, placeMode, holeCenter, appearance, onPlaceHole }: ViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
 
@@ -359,7 +364,18 @@ export default function FlashcardViewer3D({ model, building, error, stale, cardK
       const smooth = toCreasedNormals(geo, THREE.MathUtils.degToRad(38));
       geo.dispose();
       const spec = MATERIALS[part.role];
-      const mat = new THREE.MeshStandardMaterial({ color: spec.color, roughness: spec.roughness, metalness: 0 });
+      const color = part.role === 'base'
+        ? appearance.cardColor
+        : part.role === 'border'
+          ? appearance.borderColor
+          : part.role === 'alphabet'
+            ? appearance.alphabetColor
+            : part.role === 'word' || part.role === 'word-outline'
+              ? (part.role === 'word-outline' ? appearance.wordOutlineColor : appearance.wordColor)
+              : part.role === 'pattern-outline'
+                ? appearance.wordOutlineColor
+                : appearance.imageColor;
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: spec.roughness, metalness: 0 });
       const mesh = new THREE.Mesh(smooth, mat);
       mesh.name = part.role;
       mesh.castShadow = true;
@@ -415,7 +431,7 @@ export default function FlashcardViewer3D({ model, building, error, stale, cardK
     lastCardKey.current = cardKey;
     lastDims.current = dimsKey;
     t.needsRender = true;
-  }, [model, cardKey, goTo, fitKeepingDirection]);
+  }, [model, cardKey, goTo, fitKeepingDirection, appearance]);
 
   // ------------------------------------------------------------------ hole placement marker
   useEffect(() => {

@@ -14,7 +14,8 @@ import cdt2d from 'cdt2d';
 import { difference, unionAll } from './clip';
 import { canonicalizeRegion, type Polygon, type Region } from './region';
 
-export type PartRole = 'base' | 'alphabet' | 'word' | 'image';
+export type PartRole = 'base' | 'alphabet' | 'word' | 'word-outline' | 'image' | 'border' | 'pattern-outline';
+export type FeatureMode = 'raised' | 'engraved';
 
 export interface MeshPart {
   role: PartRole;
@@ -25,8 +26,9 @@ export interface MeshPart {
 export interface RaisedFeature {
   role: Exclude<PartRole, 'base'>;
   region: Region;
-  /** height above the card's front surface, mm */
+  /** height above the card's front surface, or depth into it for engraved mode, mm */
   height: number;
+  mode: FeatureMode;
 }
 
 class TriangleSink {
@@ -105,14 +107,20 @@ function addFace(sink: TriangleSink, poly: Polygon, z: number, facingUp: boolean
  * Rings are oriented outer CCW / holes CW, so the right-hand normal of each edge points
  * away from the material in every case.
  */
-function addWalls(sink: TriangleSink, poly: Polygon, z0: number, z1: number): void {
+function addWalls(sink: TriangleSink, poly: Polygon, z0: number, z1: number, reverse = false): void {
   for (const ring of poly) {
     const n = ring.length;
     for (let i = 0; i < n; i++) {
       const [px, py] = ring[i];
       const [qx, qy] = ring[(i + 1) % n];
-      sink.push(px, py, z0, qx, qy, z0, qx, qy, z1);
-      sink.push(px, py, z0, qx, qy, z1, px, py, z1);
+      if (!reverse) {
+        sink.push(px, py, z0, qx, qy, z0, qx, qy, z1);
+        sink.push(px, py, z0, qx, qy, z1, px, py, z1);
+      } else {
+        // Engraved walls face into the recess, the reverse of raised side walls.
+        sink.push(px, py, z0, qx, qy, z1, qx, qy, z0);
+        sink.push(px, py, z0, px, py, z1, qx, qy, z1);
+      }
     }
   }
 }
@@ -138,8 +146,14 @@ export function buildSolid(baseIn: Region, thickness: number, featuresIn: Raised
   for (const f of live) {
     const sink = new TriangleSink();
     for (const poly of f.region) {
-      addWalls(sink, poly, thickness, thickness + f.height);
-      addFace(sink, poly, thickness + f.height, true);
+      if (f.mode === 'engraved') {
+        const floorZ = Math.max(0.05, thickness - f.height);
+        addWalls(sink, poly, floorZ, thickness, true);
+        addFace(sink, poly, floorZ, true);
+      } else {
+        addWalls(sink, poly, thickness, thickness + f.height);
+        addFace(sink, poly, thickness + f.height, true);
+      }
     }
     parts.push({ role: f.role, positions: sink.toFloat32() });
   }

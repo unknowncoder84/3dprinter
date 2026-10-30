@@ -93,7 +93,7 @@ Push the repository to GitHub/GitLab and import it in Netlify (settings are read
   They do not detect self-intersections or analyse wall thickness; confirm in your slicer.
 * **Pictures:** SVG and clean black-on-white drawings convert well. Photos, gradients and busy
   backgrounds do not. Fine detail thinner than your nozzle will not print.
-* **Single colour** only (STL limitation). Edge bevel/rounding is not implemented.
+* **Single colour** only (standard STL limitation). The preview can show separate card, letter, word, image and border colours, but STL cannot encode filament colour or a “build pattern first, then fill colour” sequence. Use a multi-material slicer/3MF workflow, filament changes, or paint the printed details. Edge bevel/rounding is not implemented.
 * Geometry is built on the main thread in short steps (about 0.1-1 s per card); there is no Web Worker.
 * Projects live in browser storage, which is limited. The app reports a full disk instead of failing
   silently; use *Export project* for backups.
@@ -105,3 +105,22 @@ Push the repository to GitHub/GitLab and import it in Netlify (settings are read
 
 Fonts: Poppins, Lilita One, Comic Neue - SIL Open Font License 1.1 (licence files in `public/fonts`).
 Libraries: Next.js, React, Three.js, opentype.js, clipper-lib, cdt2d, JSZip, idb, lucide-react.
+
+## Styling options
+
+Open **Colour, text type & border** in the card designer:
+- **Text type / font:** Poppins Bold, Lilita One, or Comic Neue Bold. This choice applies to the alphabet and word and creates real glyph geometry in the STL.
+- **Pattern treatment:** choose raised/filled or engraved/recessed independently for the alphabet, word and illustration. Engraving is a real recessed solid operation and is limited by the card thickness.
+- **Card colour:** changes the card material in the live preview and is saved per card.
+- **Alphabet, word and image colours:** change each raised feature independently in the live preview. The word has its own colour, plus an optional printable outline ring with adjustable width and colour.
+- **Border:** choose no border, a raised outline, or an engraved outline. Set its width and height/depth. The selected border is included in the shared geometry and STL pipeline.
+
+Standard STL cannot encode filament colour or a “build pattern first, then fill colour” sequence. Use a multi-material slicer/3MF workflow, filament changes, or paint the printed details.
+
+### Number ranges
+
+Use **Generate numbers** to add any range from **1 to 100**. Existing number cards are skipped, so you can generate `1–20` now and `21–100` later without duplicates. Generated cards use the number as the alphabet value and an editable English word label.
+
+### Engrave with fill
+
+The **Engraved outline + raised fill** pattern creates a real recessed trench around the raised pattern. This is printable geometry, not a fake colour overlay. It is available for the alphabet, word and illustration, as well as the border.

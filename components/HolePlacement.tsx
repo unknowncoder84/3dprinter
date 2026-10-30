@@ -143,6 +143,8 @@ export function HolePlacement({ card, model, onChange, placeOnViewer, onTogglePl
                 <path d={regionToSvgPath(model.layers.alphabet, W, H)} />
                 <path d={regionToSvgPath(model.layers.image, W, H)} />
                 <path d={regionToSvgPath(model.layers.word, W, H)} />
+                <path d={regionToSvgPath(model.layers.wordOutline, W, H)} />
+                <path d={regionToSvgPath(model.layers.border, W, H)} />
               </g>
             )}
             {validW > 0 && validH > 0 && (

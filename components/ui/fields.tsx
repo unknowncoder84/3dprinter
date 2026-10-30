@@ -163,3 +163,26 @@ export function Toggle({ label, checked, onChange, testId, description }: { labe
     </div>
   );
 }
+
+export function ColorField({ label, value, onChange, testId, hint }: { label: string; value: string; onChange: (v: string) => void; testId?: string; hint?: string }) {
+  const id = useId();
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-slate-600">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={id}
+          data-testid={testId}
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value.toLowerCase())}
+          className="h-9 w-12 cursor-pointer rounded-lg border border-slate-300 bg-white p-1"
+        />
+        <code className="rounded bg-slate-100 px-2 py-1 text-xs uppercase text-slate-600">{value}</code>
+      </div>
+      {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}

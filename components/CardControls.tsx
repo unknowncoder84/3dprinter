@@ -1,8 +1,8 @@
 'use client';
 
-import { FONT_OPTIONS, LIMITS, type CardImage, type CurveQuality, type DeepPartial, type FlashcardConfig, type ImageMode, type TextAlign } from '@/types/flashcard';
+import { FONT_OPTIONS, LIMITS, type BorderStyle, type CardImage, type CurveQuality, type DeepPartial, type FlashcardConfig, type ImageMode, type ReliefMode, type TextAlign } from '@/types/flashcard';
 import type { FlashcardModel } from '@/lib/geometry/model';
-import { Section, NumberField, SelectField, SliderField, Toggle } from '@/components/ui/fields';
+import { Section, NumberField, SelectField, SliderField, Toggle, ColorField } from '@/components/ui/fields';
 import { ImageUploader } from '@/components/ImageUploader';
 import { HolePlacement } from '@/components/HolePlacement';
 
@@ -32,12 +32,24 @@ const QUALITY: { id: CurveQuality; label: string }[] = [
   { id: 'medium', label: 'Medium' },
   { id: 'high', label: 'High (smoothest curves)' },
 ];
+const BORDER_STYLES: { id: BorderStyle; label: string }[] = [
+  { id: 'none', label: 'No border' },
+  { id: 'raised', label: 'Raised outline (prints on the card)' },
+  { id: 'engraved', label: 'Engraved outline (cut into the card)' },
+  { id: 'engraved-filled', label: 'Engraved outline + raised fill' },
+];
+const RELIEF_MODES: { id: ReliefMode; label: string }[] = [
+  { id: 'raised', label: 'Raised / filled pattern' },
+  { id: 'engraved', label: 'Engraved / recessed pattern' },
+  { id: 'engraved-filled', label: 'Engraved outline + filled centre' },
+];
 
 export default function CardControls({ card, model, building, onPatch, onSetImage, onError, placeOnViewer, onTogglePlaceOnViewer }: Props) {
   const t = card.textSettings;
   const im = card.imageSettings;
   const d = card.dimensions;
   const g = card.geometrySettings;
+  const a = card.appearance;
   const isRaster = card.image !== null && card.image.mimeType !== 'image/svg+xml';
   const textIssues = (model?.issues ?? []).filter((i) => i.code === 'text-fit' || i.code === 'missing-glyph' || i.code === 'font-fallback' || i.code === 'empty');
 
@@ -89,6 +101,29 @@ export default function CardControls({ card, model, building, onPatch, onSetImag
         ))}
       </Section>
 
+      <Section title="Colour, text type & border" testId="section-appearance">
+        <SelectField label="Text type / font" value={t.fontId} options={FONT_OPTIONS.map((f) => ({ id: f.id, label: f.label }))} onChange={(v) => onPatch({ textSettings: { fontId: v } })} testId="font-select" />
+        <div className="grid grid-cols-2 gap-3">
+          <ColorField label="Card colour" value={a.cardColor} onChange={(v) => onPatch({ appearance: { cardColor: v } })} testId="card-color" />
+          <ColorField label="Alphabet colour" value={a.alphabetColor} onChange={(v) => onPatch({ appearance: { alphabetColor: v } })} testId="alphabet-color" />
+          <ColorField label="Word colour" value={a.wordColor} onChange={(v) => onPatch({ appearance: { wordColor: v } })} testId="word-color" />
+          <ColorField label="Image colour" value={a.imageColor} onChange={(v) => onPatch({ appearance: { imageColor: v } })} testId="image-color" />
+        </div>
+        <SelectField label="Border" value={a.borderStyle} options={BORDER_STYLES} onChange={(v) => onPatch({ appearance: { borderStyle: v } })} testId="border-style" />
+        {a.borderStyle !== 'none' && (
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <ColorField label="Border colour" value={a.borderColor} onChange={(v) => onPatch({ appearance: { borderColor: v } })} testId="border-color" />
+            <NumberField label="Border width" value={a.borderWidth} min={LIMITS.borderWidth.min} max={Math.min(LIMITS.borderWidth.max, Math.min(d.width, d.height) / 4)} step={0.5} onChange={(v) => onPatch({ appearance: { borderWidth: v } })} testId="border-width" />
+            <NumberField label={a.borderStyle === 'engraved' ? 'Engrave depth' : 'Raised height'} value={a.borderHeight} min={LIMITS.borderHeight.min} max={LIMITS.borderHeight.max} step={0.1} onChange={(v) => onPatch({ appearance: { borderHeight: v } })} testId="border-height" />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <ColorField label="Word outline colour" value={a.wordOutlineColor} onChange={(v) => onPatch({ appearance: { wordOutlineColor: v } })} testId="word-outline-color" />
+          <NumberField label="Word outline width" value={a.wordOutlineWidth} min={LIMITS.wordOutlineWidth.min} max={LIMITS.wordOutlineWidth.max} step={0.1} onChange={(v) => onPatch({ appearance: { wordOutlineWidth: v } })} testId="word-outline-width" hint="0 disables the outline" />
+        </div>
+        <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-800">Colours change the live preview and are saved with the project. Standard STL files do not store colour or print colour-change order; use a multi-material slicer/3MF workflow or paint the printed details.</p>
+      </Section>
+
       <Section title="Card dimensions" testId="section-dimensions">
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Width" value={d.width} min={LIMITS.width.min} max={LIMITS.width.max} onChange={(v) => onPatch({ dimensions: { width: v } })} testId="dim-width" />
@@ -99,8 +134,9 @@ export default function CardControls({ card, model, building, onPatch, onSetImag
       </Section>
 
       <Section title="Text settings" testId="section-text" defaultOpen={false}>
-        <SelectField label="Font" value={t.fontId} options={FONT_OPTIONS.map((f) => ({ id: f.id, label: f.label }))} onChange={(v) => onPatch({ textSettings: { fontId: v } })} testId="font-select" />
+        <p className="text-xs text-slate-500">Choose the text type in the “Colour, text type & border” section above.</p>
         <p className="text-xs font-semibold text-slate-500">Alphabet</p>
+        <SelectField label="Alphabet pattern" value={t.alphabetRelief} options={RELIEF_MODES} onChange={(v) => onPatch({ textSettings: { alphabetRelief: v } })} testId="alphabet-relief" />
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Letter height" value={t.alphabetSize} min={LIMITS.alphabetSize.min} max={LIMITS.alphabetSize.max} onChange={(v) => onPatch({ textSettings: { alphabetSize: v } })} testId="alphabet-size" hint="Height of capitals" />
           <NumberField label="Raised by" value={t.alphabetHeight} min={LIMITS.extrusion.min} max={LIMITS.extrusion.max} step={0.1} onChange={(v) => onPatch({ textSettings: { alphabetHeight: v } })} testId="alphabet-height" />
@@ -109,6 +145,7 @@ export default function CardControls({ card, model, building, onPatch, onSetImag
         </div>
         <SelectField label="Alphabet alignment" value={t.alphabetAlign} options={ALIGN} onChange={(v) => onPatch({ textSettings: { alphabetAlign: v } })} testId="alphabet-align" />
         <p className="pt-1 text-xs font-semibold text-slate-500">Word</p>
+        <SelectField label="Word pattern" value={t.wordRelief} options={RELIEF_MODES} onChange={(v) => onPatch({ textSettings: { wordRelief: v } })} testId="word-relief" />
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Letter height" value={t.wordSize} min={LIMITS.wordSize.min} max={LIMITS.wordSize.max} onChange={(v) => onPatch({ textSettings: { wordSize: v } })} testId="word-size" hint="Height of capitals" />
           <NumberField label="Raised by" value={t.wordHeight} min={LIMITS.extrusion.min} max={LIMITS.extrusion.max} step={0.1} onChange={(v) => onPatch({ textSettings: { wordHeight: v } })} testId="word-height" />
@@ -122,6 +159,7 @@ export default function CardControls({ card, model, building, onPatch, onSetImag
 
       <Section title="Image settings" testId="section-image" defaultOpen={false}>
         <p className="text-xs text-slate-500">The illustration is scaled to fit this box, keeping its proportions, and placed between the letter and the word.</p>
+        <SelectField label="Illustration pattern" value={im.reliefMode} options={RELIEF_MODES} onChange={(v) => onPatch({ imageSettings: { reliefMode: v } })} testId="image-relief-mode" />
         <div className="grid grid-cols-2 gap-3">
           <NumberField label="Max width" value={im.maxWidth} min={LIMITS.imageBox.min} max={LIMITS.imageBox.max} onChange={(v) => onPatch({ imageSettings: { maxWidth: v } })} testId="image-max-width" />
           <NumberField label="Max height" value={im.maxHeight} min={LIMITS.imageBox.min} max={LIMITS.imageBox.max} onChange={(v) => onPatch({ imageSettings: { maxHeight: v } })} testId="image-max-height" />

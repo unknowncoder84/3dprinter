@@ -184,6 +184,7 @@ const GROUPS: { id: ApplyGroup; label: string; hint: string }[] = [
   { id: 'text', label: 'Text style', hint: 'font, sizes, heights, alignment (not the letters or words)' },
   { id: 'image', label: 'Image settings', hint: 'size box, relief height, conversion options (not the pictures)' },
   { id: 'geometry', label: 'Geometry settings', hint: 'curve quality and clearances' },
+  { id: 'appearance', label: 'Colours, text type and border', hint: 'preview colours, font choice and raised border' },
 ];
 
 export function ApplySettingsDialog({

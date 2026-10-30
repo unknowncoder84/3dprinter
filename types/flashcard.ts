@@ -63,6 +63,25 @@ export const HOLE_PRESETS: { id: HolePreset; label: string }[] = [
 export type TextAlign = 'left' | 'center' | 'right';
 export type ImageMode = 'dark' | 'light' | 'silhouette';
 export type CurveQuality = 'low' | 'medium' | 'high';
+export type BorderStyle = 'none' | 'raised' | 'engraved' | 'engraved-filled';
+export type ReliefMode = 'raised' | 'engraved' | 'engraved-filled';
+
+export interface AppearanceSettings {
+  /** Preview colours. Standard STL does not preserve these colours. */
+  cardColor: string;
+  alphabetColor: string;
+  wordColor: string;
+  imageColor: string;
+  borderColor: string;
+  wordOutlineColor: string;
+  borderStyle: BorderStyle;
+  /** Width of the printed outline, in millimetres. */
+  borderWidth: number;
+  /** Height/depth of the printed outline, in millimetres. */
+  borderHeight: number;
+  /** 0 disables the printable outline around the word. */
+  wordOutlineWidth: number;
+}
 
 export interface CardImage {
   /** Changes every time the image is replaced; used as a cache key. */
@@ -89,11 +108,13 @@ export interface TextSettings {
   alphabetSize: number;
   /** Extrusion height above the card surface in mm. */
   alphabetHeight: number;
+  alphabetRelief: ReliefMode;
   alphabetAlign: TextAlign;
   alphabetOffsetX: number;
   alphabetOffsetY: number;
   wordSize: number;
   wordHeight: number;
+  wordRelief: ReliefMode;
   wordAlign: TextAlign;
   wordOffsetX: number;
   wordOffsetY: number;
@@ -111,6 +132,7 @@ export interface ImageSettings {
   offsetX: number;
   offsetY: number;
   /** Raster conversion settings (ignored for SVG artwork). */
+  reliefMode: ReliefMode;
   mode: ImageMode;
   autoThreshold: boolean;
   threshold: number;
@@ -149,6 +171,7 @@ export interface FlashcardConfig {
   imageSettings: ImageSettings;
   holeSettings: HoleSettings;
   geometrySettings: GeometrySettings;
+  appearance: AppearanceSettings;
 }
 
 export type DeepPartial<T> = {
@@ -179,6 +202,9 @@ export const LIMITS = {
   minFeature: { min: 0, max: 400 },
   bgTolerance: { min: 2, max: 120 },
   clearance: { min: 0, max: 10 },
+  borderWidth: { min: 0.5, max: 15 },
+  borderHeight: { min: 0.2, max: 10 },
+  wordOutlineWidth: { min: 0, max: 5 },
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -269,11 +295,13 @@ export function createDefaultCard(alphabet = 'Aa', word = 'ant'): FlashcardConfi
       fontId: DEFAULT_FONT_ID,
       alphabetSize: 26,
       alphabetHeight: 1.6,
+      alphabetRelief: 'raised',
       alphabetAlign: 'center',
       alphabetOffsetX: 0,
       alphabetOffsetY: 0,
       wordSize: 10,
       wordHeight: 1.2,
+      wordRelief: 'raised',
       wordAlign: 'center',
       wordOffsetX: 0,
       wordOffsetY: 0,
@@ -284,6 +312,7 @@ export function createDefaultCard(alphabet = 'Aa', word = 'ant'): FlashcardConfi
       maxWidth: 56,
       maxHeight: 32,
       reliefHeight: 1.2,
+      reliefMode: 'raised',
       offsetX: 0,
       offsetY: 0,
       mode: 'dark',
@@ -297,6 +326,18 @@ export function createDefaultCard(alphabet = 'Aa', word = 'ant'): FlashcardConfi
     },
     holeSettings: { enabled: true, diameter, x: pos.x, y: pos.y, preset: 'top-left' },
     geometrySettings: { quality: 'medium', edgeClearance: 1.5, holeClearance: 1.5 },
+    appearance: {
+      cardColor: '#f7f7f2',
+      alphabetColor: '#17171a',
+      wordColor: '#17171a',
+      imageColor: '#17171a',
+      borderColor: '#16a34a',
+      wordOutlineColor: '#16a34a',
+      borderStyle: 'none',
+      borderWidth: 1.5,
+      borderHeight: 0.8,
+      wordOutlineWidth: 0,
+    },
   };
 }
 
@@ -313,6 +354,7 @@ export function createLetterCard(letter: string, template?: FlashcardConfig): Fl
     imageSettings: { ...template.imageSettings },
     holeSettings: { ...template.holeSettings },
     geometrySettings: { ...template.geometrySettings },
+    appearance: { ...template.appearance },
   };
 }
 
@@ -335,6 +377,9 @@ function bool(v: unknown, def: boolean): boolean {
 }
 function oneOf<T extends string>(v: unknown, allowed: readonly T[], def: T): T {
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : def;
+}
+function hexColor(v: unknown, def: string): string {
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : def;
 }
 
 const IMAGE_DATA_URL = /^data:image\/(png|jpeg|jpg|svg\+xml)[;,]/i;
@@ -386,11 +431,13 @@ export function sanitizeCard(raw: unknown): FlashcardConfig {
     fontId: FONT_OPTIONS.some((f) => f.id === t.fontId) ? (t.fontId as string) : ts.fontId,
     alphabetSize: num(t.alphabetSize, ts.alphabetSize, LIMITS.alphabetSize.min, LIMITS.alphabetSize.max),
     alphabetHeight: num(t.alphabetHeight, ts.alphabetHeight, LIMITS.extrusion.min, LIMITS.extrusion.max),
+    alphabetRelief: oneOf(t.alphabetRelief, ['raised', 'engraved', 'engraved-filled'] as const, ts.alphabetRelief),
     alphabetAlign: oneOf(t.alphabetAlign, ['left', 'center', 'right'] as const, ts.alphabetAlign),
     alphabetOffsetX: num(t.alphabetOffsetX, 0, LIMITS.offset.min, LIMITS.offset.max),
     alphabetOffsetY: num(t.alphabetOffsetY, 0, LIMITS.offset.min, LIMITS.offset.max),
     wordSize: num(t.wordSize, ts.wordSize, LIMITS.wordSize.min, LIMITS.wordSize.max),
     wordHeight: num(t.wordHeight, ts.wordHeight, LIMITS.extrusion.min, LIMITS.extrusion.max),
+    wordRelief: oneOf(t.wordRelief, ['raised', 'engraved', 'engraved-filled'] as const, ts.wordRelief),
     wordAlign: oneOf(t.wordAlign, ['left', 'center', 'right'] as const, ts.wordAlign),
     wordOffsetX: num(t.wordOffsetX, 0, LIMITS.offset.min, LIMITS.offset.max),
     wordOffsetY: num(t.wordOffsetY, 0, LIMITS.offset.min, LIMITS.offset.max),
@@ -409,6 +456,7 @@ export function sanitizeCard(raw: unknown): FlashcardConfig {
     maxWidth: num(i.maxWidth ?? i.width, is.maxWidth, LIMITS.imageBox.min, LIMITS.imageBox.max),
     maxHeight: num(i.maxHeight ?? i.height, is.maxHeight, LIMITS.imageBox.min, LIMITS.imageBox.max),
     reliefHeight: num(i.reliefHeight, is.reliefHeight, LIMITS.extrusion.min, LIMITS.extrusion.max),
+    reliefMode: oneOf(i.reliefMode, ['raised', 'engraved', 'engraved-filled'] as const, is.reliefMode),
     offsetX: num(i.offsetX, 0, LIMITS.offset.min, LIMITS.offset.max),
     offsetY: num(i.offsetY, 0, LIMITS.offset.min, LIMITS.offset.max),
     mode: oneOf(i.mode, ['dark', 'light', 'silhouette'] as const, is.mode),
@@ -459,6 +507,20 @@ export function sanitizeCard(raw: unknown): FlashcardConfig {
     holeClearance: num(g.holeClearance, 1.5, LIMITS.clearance.min, LIMITS.clearance.max),
   };
 
+  const a = isObj(raw.appearance) ? raw.appearance : {};
+  const appearance: AppearanceSettings = {
+    cardColor: hexColor(a.cardColor, d.appearance.cardColor),
+    alphabetColor: hexColor(a.alphabetColor, hexColor(a.detailColor, d.appearance.alphabetColor)),
+    wordColor: hexColor(a.wordColor, hexColor(a.detailColor, d.appearance.wordColor)),
+    imageColor: hexColor(a.imageColor, hexColor(a.detailColor, d.appearance.imageColor)),
+    borderColor: hexColor(a.borderColor, d.appearance.borderColor),
+    wordOutlineColor: hexColor(a.wordOutlineColor, d.appearance.wordOutlineColor),
+    borderStyle: oneOf(a.borderStyle, ['none', 'raised', 'engraved', 'engraved-filled'] as const, d.appearance.borderStyle),
+    borderWidth: num(a.borderWidth, d.appearance.borderWidth, LIMITS.borderWidth.min, Math.min(LIMITS.borderWidth.max, Math.min(width, height) / 4)),
+    borderHeight: num(a.borderHeight, d.appearance.borderHeight, LIMITS.borderHeight.min, LIMITS.borderHeight.max),
+    wordOutlineWidth: num(a.wordOutlineWidth, d.appearance.wordOutlineWidth, LIMITS.wordOutlineWidth.min, LIMITS.wordOutlineWidth.max),
+  };
+
   return {
     id: str(raw.id, '', 80) || newId(),
     alphabet: str(raw.alphabet, d.alphabet, 12),
@@ -469,5 +531,32 @@ export function sanitizeCard(raw: unknown): FlashcardConfig {
     imageSettings,
     holeSettings,
     geometrySettings,
+    appearance,
+  };
+}
+
+/** English label used for generated number cards. The number itself remains editable in Alphabet. */
+export function numberToWord(value: number): string {
+  const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+  const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+  if (value < 10) return ones[value];
+  if (value < 20) return teens[value - 10];
+  if (value < 100) return tens[Math.floor(value / 10)] + (value % 10 ? `-${ones[value % 10]}` : '');
+  return value === 100 ? 'one hundred' : String(value);
+}
+
+/** Number card template used by the range generator. */
+export function createNumberCard(value: number, template?: FlashcardConfig): FlashcardConfig {
+  const base = createDefaultCard(String(value), numberToWord(value));
+  if (!template) return base;
+  return {
+    ...base,
+    dimensions: { ...template.dimensions },
+    textSettings: { ...template.textSettings },
+    imageSettings: { ...template.imageSettings },
+    holeSettings: { ...template.holeSettings },
+    geometrySettings: { ...template.geometrySettings },
+    appearance: { ...template.appearance },
   };
 }

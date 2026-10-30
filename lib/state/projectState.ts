@@ -7,6 +7,7 @@ import {
   DEFAULT_ALPHABET_DATA,
   createDefaultCard,
   createLetterCard,
+  createNumberCard,
   newId,
   presetPosition,
   sanitizeCard,
@@ -28,7 +29,7 @@ export interface ProjectState {
   revision: number;
 }
 
-export type ApplyGroup = 'dimensions' | 'text' | 'image' | 'hole' | 'geometry';
+export type ApplyGroup = 'dimensions' | 'text' | 'image' | 'hole' | 'geometry' | 'appearance';
 
 export interface LoadedProject {
   projectId: string;
@@ -45,6 +46,7 @@ export type ProjectAction =
   | { type: 'duplicate'; id: string }
   | { type: 'delete'; id: string }
   | { type: 'generateAz' }
+  | { type: 'generateNumbers'; from: number; to: number }
   | { type: 'applySettings'; fromId: string; toIds: string[]; groups: ApplyGroup[] }
   | { type: 'replace'; project: LoadedProject }
   | { type: 'markSaved'; projectId: string; projectName: string }
@@ -97,8 +99,13 @@ export function normalizeCard(card: FlashcardConfig): FlashcardConfig {
   }
   x = round2(x);
   y = round2(y);
-  if (dims === d && diameter === h.diameter && x === h.x && y === h.y) return card;
-  return { ...card, dimensions: dims, holeSettings: { ...h, diameter, x, y } };
+  const a = card.appearance;
+  const borderWidth = Math.max(LIMITS.borderWidth.min, Math.min(a.borderWidth, LIMITS.borderWidth.max, Math.min(dims.width, dims.height) / 4));
+  const borderHeight = Math.max(LIMITS.borderHeight.min, Math.min(a.borderHeight, LIMITS.borderHeight.max));
+  const wordOutlineWidth = Math.max(LIMITS.wordOutlineWidth.min, Math.min(a.wordOutlineWidth, LIMITS.wordOutlineWidth.max));
+  const appearance = borderWidth === a.borderWidth && borderHeight === a.borderHeight && wordOutlineWidth === a.wordOutlineWidth ? a : { ...a, borderWidth, borderHeight, wordOutlineWidth };
+  if (dims === d && diameter === h.diameter && x === h.x && y === h.y && appearance === a) return card;
+  return { ...card, dimensions: dims, holeSettings: { ...h, diameter, x, y }, appearance };
 }
 
 const firstLetter = (s: string): string => {
@@ -121,6 +128,7 @@ export function cloneCard(card: FlashcardConfig): FlashcardConfig {
     imageSettings: { ...card.imageSettings },
     holeSettings: { ...card.holeSettings },
     geometrySettings: { ...card.geometrySettings },
+    appearance: { ...card.appearance },
   };
 }
 
@@ -198,6 +206,19 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
       return bump(state, { cards: sorted });
     }
 
+    case 'generateNumbers': {
+      const lo = Math.max(1, Math.min(100, Math.round(Math.min(action.from, action.to))));
+      const hi = Math.max(lo, Math.min(100, Math.round(Math.max(action.from, action.to))));
+      const existing = new Set(state.cards.map((c) => c.alphabet.trim()));
+      const template = state.cards.find((c) => c.id === state.selectedId);
+      const created = [];
+      for (let value = lo; value <= hi; value++) {
+        if (!existing.has(String(value))) created.push(normalizeCard(createNumberCard(value, template)));
+      }
+      if (created.length === 0) return state;
+      return bump(state, { cards: state.cards.concat(created) });
+    }
+
     case 'applySettings': {
       const from = state.cards.find((c) => c.id === action.fromId);
       if (!from) return state;
@@ -211,6 +232,7 @@ export function projectReducer(state: ProjectState, action: ProjectAction): Proj
           if (g === 'image') next = { ...next, imageSettings: { ...from.imageSettings } };
           if (g === 'hole') next = { ...next, holeSettings: { ...from.holeSettings } };
           if (g === 'geometry') next = { ...next, geometrySettings: { ...from.geometrySettings } };
+          if (g === 'appearance') next = { ...next, appearance: { ...from.appearance } };
         }
         return normalizeCard(next);
       });

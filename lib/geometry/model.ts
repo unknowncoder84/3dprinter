@@ -5,7 +5,7 @@
  * Coordinates (millimetres): origin at the card centre, +X right, +Y up the card face,
  * +Z out of the front face. Back face at Z = 0, front surface at Z = thickness.
  */
-import type { CardImage, FlashcardConfig, ImageSettings } from '../../types/flashcard';
+import type { CardImage, FlashcardConfig, ImageSettings, ReliefMode } from '../../types/flashcard';
 import { difference, intersection, offsetRegion, overlapArea, unionAll } from './clip';
 import type { LoadedFont } from './fonts';
 import type { ImageConversion } from './imageConvert';
@@ -19,7 +19,7 @@ import {
   type Bounds2,
   type Region,
 } from './region';
-import { buildSolid, type MeshPart, type PartRole } from './solid';
+import { buildSolid, type FeatureMode, type MeshPart, type PartRole, type RaisedFeature } from './solid';
 import { textToRegion, type TextOutline } from './textOutline';
 import { validatePositions, type MeshValidation } from './validate';
 import { mergeParts } from '../export/stl';
@@ -43,8 +43,8 @@ export interface FlashcardModel {
   bounds: { min: [number, number, number]; max: [number, number, number] };
   expected: { width: number; height: number; thickness: number; maxZ: number };
   /** 2D footprints (card coordinates) used for the hole-placement view. */
-  layers: { card: Region; alphabet: Region; word: Region; image: Region };
-  placements: { alphabet: Bounds2 | null; word: Bounds2 | null; image: Bounds2 | null };
+  layers: { card: Region; alphabet: Region; word: Region; wordOutline: Region; image: Region; border: Region };
+  placements: { alphabet: Bounds2 | null; word: Bounds2 | null; wordOutline: Bounds2 | null; image: Bounds2 | null; border: Bounds2 | null };
   issues: ModelIssue[];
   /** true when the model must not be exported (e.g. illustration conversion failed). */
   blocking: boolean;
@@ -144,7 +144,46 @@ export async function buildFlashcardModel(
   finite('Alphabet height', ts.alphabetHeight, 0.1, 20);
   finite('Word height', ts.wordHeight, 0.1, 20);
   finite('Image relief height', is.reliefHeight, 0.1, 20);
-
+  const maxEngraveDepth = Math.max(0.1, T - 0.2);
+  const safeDepth = (label: string, height: number, mode: ReliefMode): number => {
+    if (mode !== 'engraved') return height;
+    if (height >= maxEngraveDepth) {
+      error('engrave-depth', `${label} engraving is deeper than the card allows. It was limited to ${maxEngraveDepth.toFixed(2)} mm; increase card thickness before exporting.`);
+      return maxEngraveDepth;
+    }
+    return height;
+  };
+  const alphabetHeight = safeDepth('Alphabet', ts.alphabetHeight, ts.alphabetRelief);
+  const wordHeight = safeDepth('Word', ts.wordHeight, ts.wordRelief);
+  const imageHeight = safeDepth('Illustration', is.reliefHeight, is.reliefMode);
+  const borderHeight = safeDepth('Border', cfg.appearance.borderHeight, cfg.appearance.borderStyle === 'engraved' ? 'engraved' : 'raised');
+  const featureEntries = (
+    role: Exclude<PartRole, 'base' | 'pattern-outline'>,
+    region: Region,
+    height: number,
+    mode: ReliefMode,
+  ): RaisedFeature[] => {
+    if (!region.length) return [];
+    if (mode !== 'engraved-filled') {
+      return [{ role, region, height, mode: (mode === 'engraved' ? 'engraved' : 'raised') as FeatureMode }];
+    }
+    if (role === 'word-outline' && mode === 'engraved-filled') {
+      // The word's own engraved trench already supplies the inner outline; keep the optional
+      // user outline as a raised ring outside that trench to avoid overlapping shells.
+      return [{ role, region, height, mode: 'raised' }];
+    }
+    const fill = region;
+    // Keep the source boundary verbatim. Re-unioning a glyph with counters can slightly
+    // move its seam vertices, which would leave a tiny open edge between the raised fill and
+    // its engraved trench in the final solid.
+    const outlineSource = role === 'border' ? region : region.map((poly) => [poly[0]]);
+    const trench = difference(offsetRegion(outlineSource, 0.35, 'round'), outlineSource);
+    if (height >= maxEngraveDepth) warn('engrave-depth', `${role} engraving outline was limited to ${maxEngraveDepth.toFixed(2)} mm by the card thickness.`);
+    return [
+      { role, region: fill.length ? fill : region, height, mode: 'raised' as FeatureMode },
+      { role: 'pattern-outline', region: trench, height: Math.min(height, maxEngraveDepth), mode: 'engraved' as FeatureMode },
+    ];
+  };
   const q = qualityProfile(gs.quality);
   const card = roundedRectRegion(0, 0, W, H, R, q.cornerSegments);
 
@@ -172,7 +211,7 @@ export async function buildFlashcardModel(
   const alphabetText = cfg.alphabet.trim();
   const wordText = cfg.word.trim();
   let alphaOutline: TextOutline | null = null;
-  let wordOutline: TextOutline | null = null;
+  let wordTextOutline: TextOutline | null = null;
   if (alphabetText || wordText) {
     finite('Alphabet size', ts.alphabetSize, 2, 300);
     finite('Word size', ts.wordSize, 2, 300);
@@ -184,10 +223,10 @@ export async function buildFlashcardModel(
     }
     if (loaded.note) warn('font-fallback', loaded.note);
     if (alphabetText) alphaOutline = cachedText(ts.fontId, loaded, alphabetText, ts.alphabetSize, ts.letterSpacing);
-    if (wordText) wordOutline = cachedText(ts.fontId, loaded, wordText, ts.wordSize, ts.letterSpacing);
+    if (wordText) wordTextOutline = cachedText(ts.fontId, loaded, wordText, ts.wordSize, ts.letterSpacing);
     for (const [label, o] of [
       ['alphabet', alphaOutline],
-      ['word', wordOutline],
+      ['word', wordTextOutline],
     ] as const) {
       if (o && o.missing.length) {
         warn('missing-glyph', `The font has no glyph for ${o.missing.map((c) => `"${c}"`).join(', ')} in the ${label}; ${o.missing.length > 1 ? 'those characters were' : 'that character was'} skipped.`);
@@ -242,11 +281,11 @@ export async function buildFlashcardModel(
 
   let wordRegion: Region = [];
   let wordTop = -H / 2 + bottomMargin;
-  if (wordOutline && wordOutline.bounds) {
-    const f = fitWidth(wordOutline, availW, ts.autoFit);
+  if (wordTextOutline && wordTextOutline.bounds) {
+    const f = fitWidth(wordTextOutline, availW, ts.autoFit);
     if (f.scale < 1) warn('text-fit', `The word was scaled to ${Math.round(f.scale * 100)}% to fit the card width.`);
     const b = f.bounds!;
-    const em = wordOutline.em * f.scale;
+    const em = wordTextOutline.em * f.scale;
     const baseline = -H / 2 + bottomMargin + Math.max(0.2 * em, -b.minY);
     const dx = alignDx(b, ts.wordAlign, W, sideMargin);
     wordRegion = translateRegion(f.region, dx + ts.wordOffsetX, baseline + ts.wordOffsetY);
@@ -280,14 +319,38 @@ export async function buildFlashcardModel(
   const holeZone = holeDisc.length ? offsetRegion(holeDisc, gs.holeClearance) : [];
   const featureArea = holeZone.length ? difference(usable, holeZone) : usable;
 
-  const trim = (label: string, raw: Region): Region => {
+  // A border is part of the shared solid, not a viewer-only decoration. Build it as a
+  // rounded rectangular ring inside the usable card area, then keep text and artwork away
+  // from it so the exported mesh has no overlapping raised shells.
+  let borderRaw: Region = [];
+  if (cfg.appearance.borderStyle !== 'none') {
+    const outerWidth = W - 2 * gs.edgeClearance;
+    const outerHeight = H - 2 * gs.edgeClearance;
+    const outerRadius = Math.max(0, R - gs.edgeClearance);
+    const innerWidth = outerWidth - 2 * cfg.appearance.borderWidth;
+    const innerHeight = outerHeight - 2 * cfg.appearance.borderWidth;
+    const innerRadius = Math.max(0, outerRadius - cfg.appearance.borderWidth);
+    if (innerWidth > 4 && innerHeight > 4) {
+      const outer = roundedRectRegion(0, 0, outerWidth, outerHeight, outerRadius, q.cornerSegments);
+      const inner = roundedRectRegion(0, 0, innerWidth, innerHeight, innerRadius, q.cornerSegments);
+      borderRaw = difference(outer, inner);
+    } else {
+      warn('border-size', 'The selected border is too wide for this card and was disabled for this model.');
+    }
+  }
+  let border = borderRaw.length ? cleanRegion(intersection(borderRaw, featureArea)) : [];
+  const borderGuard = border.length ? offsetRegion(border, 0.4) : [];
+  const contentArea = borderGuard.length ? difference(featureArea, borderGuard) : featureArea;
+
+  const trim = (label: string, raw: Region, allowed: Region = contentArea): Region => {
     if (!raw.length) return raw;
     const beyond = regionArea(difference(raw, usable));
     const nearHole = holeZone.length ? overlapArea(raw, holeZone) : 0;
     if (beyond > 0.05) warn('edge-trim', `The ${label} extends beyond the usable card area (it must stay ${gs.edgeClearance} mm from the edge) and was trimmed.`);
     if (nearHole > 0.05) warn('hole-collision', `The hole is too close to, or overlaps, the ${label}. The ${label} was trimmed around the hole.`);
-    return cleanRegion(intersection(raw, featureArea));
+    return cleanRegion(intersection(raw, allowed));
   };
+  if (borderRaw.length && border.length === 0) warn('border-trimmed', 'The border was fully trimmed by the hole or card clearances.');
   let alpha = trim('alphabet', alphaRegion);
   let word = trim('word', wordRegion);
   let image = trim('illustration', imageRegion);
@@ -299,8 +362,18 @@ export async function buildFlashcardModel(
       word = cleanRegion(difference(word, guard));
     }
   }
-  if (image.length && (alpha.length || word.length)) {
-    const guard = offsetRegion(unionAll([alpha, word]), 0.4);
+  let wordOutline: Region = [];
+  if (word.length && cfg.appearance.wordOutlineWidth > 0) {
+    const outlineGap = ts.wordRelief === 'engraved-filled' ? 0.4 : 0;
+    const inner = outlineGap > 0 ? offsetRegion(word, outlineGap, 'round') : word;
+    const expanded = offsetRegion(word, cfg.appearance.wordOutlineWidth + outlineGap, 'round');
+    wordOutline = trim('word outline', difference(expanded, inner));
+    if (alpha.length) wordOutline = cleanRegion(difference(wordOutline, offsetRegion(alpha, 0.4)));
+    if (wordOutline.length === 0) warn('word-outline-trimmed', 'The word outline was fully trimmed by the card or another feature.');
+  }
+
+  if (image.length && (alpha.length || word.length || wordOutline.length)) {
+    const guard = offsetRegion(unionAll([alpha, word, wordOutline]), 0.4);
     if (overlapArea(image, guard) > 0.1) {
       warn('overlap', 'The illustration overlaps the alphabet or word and was trimmed around them.');
       image = cleanRegion(difference(image, guard));
@@ -311,18 +384,20 @@ export async function buildFlashcardModel(
     blocking = true;
   }
   if (alphabetText && alpha.length === 0 && alphaOutline?.bounds) warn('empty', 'The alphabet is not visible on the card (it was trimmed away entirely).');
-  if (wordText && word.length === 0 && wordOutline?.bounds) warn('empty', 'The word is not visible on the card (it was trimmed away entirely).');
+  if (wordText && wordRegion.length === 0 && wordTextOutline?.bounds) warn('empty', 'The word is not visible on the card (it was trimmed away entirely).');
 
   mark('clip');
   if (cancelled()) throw new ModelError('cancelled');
   await yieldToUi();
 
   // ---- solid ---------------------------------------------------------------------------
-  if (issues.some((i) => i.code === 'hole-edge')) blocking = true;
+  if (issues.some((i) => i.code === 'hole-edge' || i.code === 'engrave-depth')) blocking = true;
   const parts = buildSolid(base, T, [
-    { role: 'alphabet', region: alpha, height: ts.alphabetHeight },
-    { role: 'word', region: word, height: ts.wordHeight },
-    { role: 'image', region: image, height: is.reliefHeight },
+    ...featureEntries('alphabet', alpha, alphabetHeight, ts.alphabetRelief),
+    ...featureEntries('word', word, wordHeight, ts.wordRelief),
+    ...featureEntries('word-outline', wordOutline, wordHeight, ts.wordRelief),
+    ...featureEntries('image', image, imageHeight, is.reliefMode),
+    ...featureEntries('border', border, borderHeight, cfg.appearance.borderStyle === 'engraved' ? 'engraved' : cfg.appearance.borderStyle === 'engraved-filled' ? 'engraved-filled' : 'raised'),
   ]);
   mark('solid');
 
@@ -337,9 +412,11 @@ export async function buildFlashcardModel(
   }
 
   const maxRaise = Math.max(
-    alpha.length ? ts.alphabetHeight : 0,
-    word.length ? ts.wordHeight : 0,
-    image.length ? is.reliefHeight : 0,
+    alpha.length && ts.alphabetRelief !== 'engraved' ? alphabetHeight : 0,
+    word.length && ts.wordRelief !== 'engraved' ? wordHeight : 0,
+    wordOutline.length && ts.wordRelief !== 'engraved' ? wordHeight : 0,
+    image.length && is.reliefMode !== 'engraved' ? imageHeight : 0,
+    border.length && cfg.appearance.borderStyle !== 'engraved' && cfg.appearance.borderStyle !== 'none' ? borderHeight : 0,
   );
   const t1 = now();
 
@@ -347,8 +424,8 @@ export async function buildFlashcardModel(
     parts,
     bounds: { min: validation.boundsMin, max: validation.boundsMax },
     expected: { width: W, height: H, thickness: T, maxZ: T + maxRaise },
-    layers: { card, alphabet: alpha, word, image },
-    placements: { alphabet: regionBounds(alpha), word: regionBounds(word), image: regionBounds(image) },
+    layers: { card, alphabet: alpha, word, wordOutline, image, border },
+    placements: { alphabet: regionBounds(alpha), word: regionBounds(word), wordOutline: regionBounds(wordOutline), image: regionBounds(image), border: regionBounds(border) },
     issues,
     blocking,
     validation,

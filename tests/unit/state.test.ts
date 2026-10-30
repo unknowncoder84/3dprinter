@@ -156,3 +156,45 @@ test('sanitizeCard repairs hostile values and converts schema v1 cards', () => {
   assert.equal(v1.holeSettings.y, 93);
   assert.equal(v1.textSettings.alphabetSize, createDefaultCard().textSettings.alphabetSize, 'incomparable v1 sizes reset to defaults');
 });
+
+test('appearance colours, text type and border settings persist and copy per card', () => {
+  let s = createInitialState();
+  const id = selected(s).id;
+  s = reduce(s, {
+    type: 'update',
+    id,
+    patch: {
+      appearance: { cardColor: '#ffcc00', wordColor: '#102030', borderColor: '#ef4444', borderStyle: 'raised', borderWidth: 2, borderHeight: 0.9 },
+      textSettings: { fontId: 'lilita-one' },
+    },
+  });
+  assert.equal(selected(s).appearance.cardColor, '#ffcc00');
+  assert.equal(selected(s).appearance.borderStyle, 'raised');
+  s = reduce(s, { type: 'duplicate', id });
+  const copy = selected(s);
+  assert.equal(copy.textSettings.fontId, 'lilita-one');
+  assert.equal(copy.appearance.borderColor, '#ef4444');
+  s = reduce(s, { type: 'update', id: copy.id, patch: { appearance: { cardColor: '#00ff00' } } });
+  s = reduce(s, { type: 'applySettings', fromId: copy.id, toIds: [id], groups: ['appearance'] });
+  assert.equal(s.cards[0].appearance.cardColor, '#00ff00');
+  const parsed = parseProject(JSON.stringify(serializeProject(s)));
+  assert.equal(parsed.project.cards[0].appearance.borderStyle, 'raised');
+  assert.equal(parsed.project.cards[0].textSettings.fontId, 'lilita-one');
+  const safe = sanitizeCard({ appearance: { cardColor: 'red', borderStyle: 'bogus', borderWidth: 999 } });
+  assert.equal(safe.appearance.cardColor, '#f7f7f2');
+  assert.equal(safe.appearance.borderStyle, 'none');
+  assert.ok(safe.appearance.borderWidth <= 15);
+});
+
+test('number range generation adds 1-100 cards without duplicating existing numbers', () => {
+  let s = createInitialState();
+  s = reduce(s, { type: 'generateNumbers', from: 1, to: 5 });
+  assert.equal(s.cards.length, 6, 'five number cards plus the default card');
+  assert.deepEqual(s.cards.slice(1).map((c) => [c.alphabet, c.word]), [
+    ['1', 'one'], ['2', 'two'], ['3', 'three'], ['4', 'four'], ['5', 'five'],
+  ]);
+  const again = reduce(s, { type: 'generateNumbers', from: 3, to: 8 });
+  assert.equal(again.cards.length, 9, 'only 6, 7 and 8 were added');
+  assert.equal(again.cards.filter((c) => c.alphabet === '3').length, 1);
+  assert.equal(again.cards.at(-1)?.word, 'eight');
+});
