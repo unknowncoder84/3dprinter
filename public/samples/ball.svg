@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <title>Beach ball (sample illustration)</title>
+  <circle cx="100" cy="100" r="92" fill="#111"/>
+  <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
+    <path d="M100 8 Q40 100 100 192"/>
+    <path d="M100 8 Q160 100 100 192"/>
+    <path d="M10 100 Q100 60 190 100"/>
+  </g>
+  <circle cx="100" cy="100" r="14" fill="#fff"/>
+  <circle cx="100" cy="100" r="6" fill="#111"/>
+</svg>

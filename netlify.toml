@@ -1,0 +1,42 @@
+# Netlify configuration for 3D Flashcard Studio.
+#
+# The app is a Next.js project built with `output: 'export'` (see next.config.js): it is
+# 100% client-side, so Netlify just serves the static files in ./out.
+# NETLIFY_NEXT_PLUGIN_SKIP stops Netlify from adding the Next.js server runtime plugin,
+# which a static export neither needs nor wants.
+
+[build]
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# No SPA catch-all redirect: there is a single route, and unknown URLs correctly get out/404.html.
+
+# Hashed build assets never change, so cache them for a year.
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Fonts are fetched at runtime to build the 3D lettering. Cache for a week.
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/samples/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

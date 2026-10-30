@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* make number inputs less fiddly */
+input[type='number']::-webkit-inner-spin-button {
+  opacity: 0.4;
+}

@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+dist
+.tmp
+tests/e2e/out
+.DS_Store
+*.log
+*.tsbuildinfo
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.netlify

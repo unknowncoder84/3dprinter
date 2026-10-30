@@ -1,0 +1,46 @@
+{
+  "name": "3d-flashcard-studio",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Design alphabet flashcards, preview them in 3D and export real STL files for 3D printing.",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "node scripts/serve-out.mjs",
+    "preview": "node scripts/serve-out.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --import tsx --test tests/unit/geometry.test.ts tests/unit/state.test.ts",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test": "npm run typecheck && npm run test:unit"
+  },
+  "dependencies": {
+    "cdt2d": "^1.0.0",
+    "clipper-lib": "^6.4.2",
+    "idb": "^8.0.4",
+    "jszip": "^3.10.2",
+    "lucide-react": "^0.344.0",
+    "next": "^14.2.35",
+    "opentype.js": "^1.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.160.1"
+  },
+  "devDependencies": {
+    "@types/clipper-lib": "^6.4.0",
+    "@types/node": "^20.19.43",
+    "@types/opentype.js": "^1.3.10",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.160.0",
+    "autoprefixer": "^10.6.2",
+    "playwright-core": "^1.64.1",
+    "pngjs": "^7.0.0",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

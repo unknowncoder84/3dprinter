@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 270" width="420" height="270">
+  <title>Cartoon ant (sample illustration)</title>
+  <!-- legs -->
+  <g fill="none" stroke="#111" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 165 L118 212 L92 246"/>
+    <path d="M185 172 L178 222 L160 252"/>
+    <path d="M225 170 L262 214 L292 244"/>
+  </g>
+  <!-- abdomen with stripes -->
+  <ellipse cx="305" cy="128" rx="86" ry="62" fill="#111"/>
+  <g fill="#fff">
+    <path d="M278 60 Q262 128 278 196 L290 196 Q274 128 290 60 Z"/>
+    <path d="M318 60 Q302 128 318 196 L330 196 Q314 128 330 60 Z"/>
+    <path d="M356 74 Q342 128 356 182 L366 182 Q354 128 366 74 Z"/>
+  </g>
+  <!-- thorax and head -->
+  <ellipse cx="200" cy="140" rx="46" ry="38" fill="#111"/>
+  <circle cx="108" cy="124" r="58" fill="#111"/>
+  <!-- face -->
+  <circle cx="90" cy="108" r="19" fill="#fff"/>
+  <circle cx="86" cy="111" r="10" fill="#111"/>
+  <circle cx="83" cy="107" r="3.5" fill="#fff"/>
+  <path d="M66 146 Q92 172 126 150" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <!-- antennae -->
+  <g fill="none" stroke="#111" stroke-width="9" stroke-linecap="round">
+    <path d="M86 72 Q66 34 34 28"/>
+    <path d="M122 68 Q138 30 172 22"/>
+  </g>
+  <circle cx="30" cy="28" r="9" fill="#111"/>
+  <circle cx="176" cy="21" r="9" fill="#111"/>
+</svg>
